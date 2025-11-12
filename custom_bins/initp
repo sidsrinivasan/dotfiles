@@ -1,0 +1,213 @@
+#!/bin/bash
+
+set -e  # Exit on error
+
+# Parse arguments
+PROJECT_DIR=""
+PYTHON_VERSION="3.12.7"
+INSTALL_TEST=false
+INSTALL_COMPUTE=false
+SETUP_PACKAGE=false
+
+print_usage() {
+    echo "Usage: initp <project_dir> [--python <version>] [--package] [--test] [--compute]"
+    echo ""
+    echo "Arguments:"
+    echo "  project_dir           Required: Directory name for the new project"
+    echo "  --python <version>    Optional: Python version (default: 3.12.7)"
+    echo "  --package             Optional: Initialize as a package (default: script)"
+    echo "  --test                Optional: Install pytest and pytest-cov"
+    echo "  --compute             Optional: Install numpy, torch, pandas, scipy, scikit-learn, seaborn"
+    exit 1
+}
+
+# Check if at least one argument is provided
+if [ $# -eq 0 ]; then
+    print_usage
+fi
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --python)
+            PYTHON_VERSION="$2"
+            shift 2
+            ;;
+        --test)
+            INSTALL_TEST=true
+            shift
+            ;;
+        --compute)
+            INSTALL_COMPUTE=true
+            shift
+            ;;
+        --package)
+            SETUP_PACKAGE=true
+            shift
+            ;;
+        --help|-h)
+            print_usage
+            ;;
+        *)
+            if [ -z "$PROJECT_DIR" ]; then
+                PROJECT_DIR="$1"
+            else
+                echo "Error: Unknown argument '$1'"
+                print_usage
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [ -z "$PROJECT_DIR" ]; then
+    echo "Error: project_dir is required"
+    print_usage
+fi
+
+echo "🚀 Initializing Python project: $PROJECT_DIR"
+echo "   Python version: $PYTHON_VERSION"
+echo "   Package mode: $SETUP_PACKAGE"
+echo "   Tests: $INSTALL_TEST"
+echo "   Compute libraries: $INSTALL_COMPUTE"
+echo ""
+
+# 1-2. Create project directory and cd into it
+mkdir -p "$PROJECT_DIR"
+cd "$PROJECT_DIR"
+echo "✓ Created and entered directory: $PROJECT_DIR"
+
+# 3. Initialize uv project
+if [ "$SETUP_PACKAGE" = true ]; then
+    uv init --package --python "$PYTHON_VERSION"
+    echo "✓ Initialized uv project as package"
+else
+    uv init --python "$PYTHON_VERSION"
+    echo "✓ Initialized uv project as script"
+fi
+
+# 4. Create virtual environment and activate
+uv venv
+source .venv/bin/activate
+echo "✓ Created and activated virtual environment"
+
+# 5. Install package in editable mode (only if --package)
+if [ "$SETUP_PACKAGE" = true ]; then
+    uv pip install -e .
+    echo "✓ Installed package in editable mode"
+fi
+
+# 6. Create .pre-commit-config.yaml
+cat > .pre-commit-config.yaml << 'EOF'
+minimum_pre_commit_version: 4.2.0
+exclude: ^LICENSES/|\.(html|svg)$
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.0
+    hooks:
+      - id: ruff-check
+        name: Lint Python code with Ruff
+        types_or: [ python, pyi ]
+        args: [ --fix,  --exit-non-zero-on-fix ]
+      - id: ruff-format
+        name: Format Python code with Ruff
+        types_or: [ python, pyi, jupyter ]
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.5.9
+    hooks:
+      - id: uv-lock
+        name: Update lockfile with uv
+      - id: uv-export
+        name: Export lockfile with uv
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.3.0
+    hooks:
+      - id: codespell
+        name: Check for common misspellings in text files
+        types_or: [python, rst, markdown]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Remove trailing whitespace
+      - id: end-of-file-fixer
+        name: Ensure files end in newlines
+      - id: debug-statements
+        name: Check for debug statements
+      - id: check-merge-conflict
+        name: Check for remaining merge conflict markers
+      - id: check-toml
+        name: Ensure TOML files are valid
+      - id: check-yaml
+        name: Ensure YAML files are valid
+      - id: check-added-large-files
+        name: Check for added large files
+EOF
+echo "✓ Created .pre-commit-config.yaml"
+
+# 7. Install pre-commit hooks
+uvx pre-commit install
+echo "✓ Installed pre-commit hooks"
+
+# 8. Append ruff settings to pyproject.toml
+cat >> pyproject.toml << 'EOF'
+
+[tool.ruff]
+line-length = 120
+# extend-include = ["*.ipynb"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pylint]
+max-args = 8
+
+[tool.ruff.format]
+docstring-code-format = true
+exclude = []
+EOF
+echo "✓ Added ruff configuration to pyproject.toml"
+
+# 9. Install testing tools if --test flag is set
+if [ "$INSTALL_TEST" = true ]; then
+    echo "Installing test dependencies..."
+    uv add --dev pytest
+    uv add --dev pytest-cov
+
+    # Create tests directory
+    mkdir -p tests
+    touch tests/__init__.py
+
+    # Add pytest configuration to pyproject.toml
+    cat >> pyproject.toml << 'EOF'
+
+[tool.pytest.ini_options]
+addopts = [
+    "--cov=src",
+    "--cov-report=term-missing",
+]
+testpaths = ["tests"]
+EOF
+    echo "✓ Installed pytest and pytest-cov"
+fi
+
+# 10. Install ipykernel
+uv add --dev ipykernel
+echo "✓ Installed ipykernel"
+
+# 11. Install compute libraries if --compute flag is set
+if [ "$INSTALL_COMPUTE" = true ]; then
+    echo "Installing compute libraries..."
+    uv add numpy torch pandas scipy scikit-learn seaborn
+    echo "✓ Installed compute libraries"
+fi
+
+echo ""
+echo "🎉 Project setup complete!"
+echo ""
+echo "Entering project directory and activating virtual environment..."
+echo ""
+
+# Activate venv in a new shell (already in project directory)
+exec zsh -c "source .venv/bin/activate && exec zsh"
