@@ -31,7 +31,7 @@ while (( "$#" )); do
 done
 
 echo "deploying on machine..."
-echo "using extra aliases: ${ALIASES[@]}"
+echo "using extra aliases: ${ALIASES[@]:-none}"
 
 # Tmux setup
 echo "source $DOT_DIR/config/tmux.conf" > $HOME/.tmux.conf
@@ -44,6 +44,7 @@ fi
 
 # zshrc setup
 echo "source $DOT_DIR/config/zshrc.sh" > $HOME/.zshrc
+
 # Append additional alias scripts if specified
 if [ -n "${ALIASES+x}" ]; then
     for alias in "${ALIASES[@]}"; do

@@ -170,8 +170,6 @@ chx () {
 #-------------------------------------------------------------
 alias sv="source .venv/bin/activate"
 alias de="deactivate"
-alias ma="micromamba activate"
-alias md="micromamba deactivate"
 
 # -------------------------------------------------------------------
 # Slurm
